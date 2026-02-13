@@ -1,0 +1,12 @@
+[package]
+name = "tracekit-report"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tracekit-core = { path = "../tracekit-core" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+chrono = { workspace = true }
+colored = { workspace = true }

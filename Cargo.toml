@@ -1,0 +1,18 @@
+[workspace]
+members = [
+    "crates/tracekit-core",
+    "crates/tracekit-ingest",
+    "crates/tracekit-report",
+    "crates/tracekit-cli",
+]
+resolver = "2"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+thiserror = "1"
+chrono = { version = "0.4", features = ["serde"] }
+walkdir = "2"
+colored = "2"
+clap = { version = "4", features = ["derive"] }

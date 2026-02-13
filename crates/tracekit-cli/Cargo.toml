@@ -1,0 +1,19 @@
+[package]
+name = "tracekit"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "tracekit"
+path = "src/main.rs"
+
+[dependencies]
+tracekit-core = { path = "../tracekit-core" }
+tracekit-ingest = { path = "../tracekit-ingest" }
+tracekit-report = { path = "../tracekit-report" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+chrono = { workspace = true }
+colored = { workspace = true }
+clap = { workspace = true }

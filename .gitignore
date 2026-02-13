@@ -1,0 +1,35 @@
+# Rust build artifacts
+/target/
+**/*.rs.bk
+
+# Generated report files (contain session data)
+report*.html
+report*.json
+*.report.html
+*.report.json
+
+# Internal specs / planning docs (not for public)
+specs/
+*.spec.md
+llm-report-spec.md
+
+# Any accidentally placed session/trace files
+*.jsonl
+*.jsonl.bak
+sessions/
+
+# Local config or credentials
+.env
+.env.*
+config.local.toml
+openrouter.key
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo

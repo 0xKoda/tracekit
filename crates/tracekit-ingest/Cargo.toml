@@ -1,0 +1,13 @@
+[package]
+name = "tracekit-ingest"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tracekit-core = { path = "../tracekit-core" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+chrono = { workspace = true }
+walkdir = { workspace = true }
