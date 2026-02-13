@@ -133,6 +133,13 @@ pub fn print_analysis(result: &AnalysisResult) {
     println!("  Output tok : {}", fmt_tokens(s.total_output_tokens));
     println!("  Total cost : {}", fmt_cost(s.total_cost_usd).green().bold().to_string());
 
+    let total_waste: f64 = result.findings.iter()
+        .filter_map(|f| f.wasted_cost_usd)
+        .sum();
+    if total_waste > 0.0 {
+        println!("  Identified waste : {}", format!("~${:.2}", total_waste).red().bold().to_string());
+    }
+
     // Top expensive messages
     if !result.top_expensive_messages.is_empty() {
         println!("\n{}", "── Top Expensive Generations ───────────────────────────────────".bold());
