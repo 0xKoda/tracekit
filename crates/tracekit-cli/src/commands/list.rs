@@ -77,7 +77,8 @@ pub fn run(args: ListArgs) -> Result<()> {
             if let Some(mid) = &model_id {
                 let mid_lower = mid.to_lowercase();
                 sessions.retain(|s| {
-                    s.model.as_ref()
+                    s.model
+                        .as_ref()
                         .map(|m| m.to_lowercase().contains(&mid_lower))
                         .unwrap_or(false)
                 });
@@ -90,13 +91,16 @@ pub fn run(args: ListArgs) -> Result<()> {
                 }
                 "cost" => {
                     sessions.sort_by(|a, b| {
-                        b.total_cost_usd.unwrap_or(0.0)
+                        b.total_cost_usd
+                            .unwrap_or(0.0)
                             .partial_cmp(&a.total_cost_usd.unwrap_or(0.0))
                             .unwrap_or(std::cmp::Ordering::Equal)
                     });
                 }
                 "agent" => {
-                    sessions.sort_by(|a, b| a.source_agent.to_string().cmp(&b.source_agent.to_string()));
+                    sessions.sort_by(|a, b| {
+                        a.source_agent.to_string().cmp(&b.source_agent.to_string())
+                    });
                 }
                 _ => {} // "date" — already sorted newest-first by discover_sessions
             }

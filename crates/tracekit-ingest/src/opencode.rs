@@ -3,7 +3,6 @@
 ///   ~/.local/share/opencode/storage/session/<project_hash>/<ses_*.json>
 ///   ~/.local/share/opencode/storage/message/<ses_id>/<msg_*.json>
 ///   ~/.local/share/opencode/storage/part/<msg_id>/<prt_*.json>
-
 use anyhow::{Context, Result};
 use chrono::{DateTime, TimeZone, Utc};
 use serde::Deserialize;
@@ -67,7 +66,9 @@ struct RawTime {
 fn ms_to_utc(ms: u64) -> DateTime<Utc> {
     let secs = (ms / 1000) as i64;
     let nanos = ((ms % 1000) * 1_000_000) as u32;
-    Utc.timestamp_opt(secs, nanos).single().unwrap_or_else(Utc::now)
+    Utc.timestamp_opt(secs, nanos)
+        .single()
+        .unwrap_or_else(Utc::now)
 }
 
 fn parse_session_file(path: &std::path::Path, root: &std::path::Path) -> Result<CanonicalSession> {
@@ -75,11 +76,11 @@ fn parse_session_file(path: &std::path::Path, root: &std::path::Path) -> Result<
     let raw: RawSession = serde_json::from_str(&content)
         .with_context(|| format!("parsing session {}", path.display()))?;
 
-    let started_at = raw.time.as_ref()
-        .and_then(|t| t.created)
-        .map(ms_to_utc);
+    let started_at = raw.time.as_ref().and_then(|t| t.created).map(ms_to_utc);
 
-    let ended_at = raw.time.as_ref()
+    let ended_at = raw
+        .time
+        .as_ref()
         .and_then(|t| t.updated.or(t.completed))
         .map(ms_to_utc);
 
@@ -88,7 +89,12 @@ fn parse_session_file(path: &std::path::Path, root: &std::path::Path) -> Result<
     let (message_count, model) = if msg_root.exists() {
         let mut count = 0;
         let mut found_model: Option<String> = None;
-        for e in WalkDir::new(&msg_root).min_depth(1).max_depth(1).into_iter().filter_map(|e| e.ok()) {
+        for e in WalkDir::new(&msg_root)
+            .min_depth(1)
+            .max_depth(1)
+            .into_iter()
+            .filter_map(|e| e.ok())
+        {
             if e.path().extension().and_then(|x| x.to_str()) == Some("json") {
                 count += 1;
                 if found_model.is_none() {
@@ -127,14 +133,22 @@ fn parse_session_file(path: &std::path::Path, root: &std::path::Path) -> Result<
 pub fn parse_session(session: &CanonicalSession) -> Result<ParsedSession> {
     let root = match default_root(Agent::Opencode) {
         Some(r) => r,
-        None => return Ok(ParsedSession { session: session.clone(), messages: Vec::new() }),
+        None => {
+            return Ok(ParsedSession {
+                session: session.clone(),
+                messages: Vec::new(),
+            })
+        }
     };
 
     let msg_root = root.join("message").join(&session.session_id);
     let part_root = root.join("part");
 
     if !msg_root.exists() {
-        return Ok(ParsedSession { session: session.clone(), messages: Vec::new() });
+        return Ok(ParsedSession {
+            session: session.clone(),
+            messages: Vec::new(),
+        });
     }
 
     let mut messages = Vec::new();
@@ -163,17 +177,28 @@ pub fn parse_session(session: &CanonicalSession) -> Result<ParsedSession> {
             Err(_) => continue,
         };
 
-        let msg_id = v.get("id").and_then(|x| x.as_str()).unwrap_or("").to_string();
+        let msg_id = v
+            .get("id")
+            .and_then(|x| x.as_str())
+            .unwrap_or("")
+            .to_string();
         let role_str = v.get("role").and_then(|x| x.as_str()).unwrap_or("user");
         let role = match role_str {
             "assistant" => Role::Assistant,
             "user" => Role::User,
             _ => Role::User,
         };
-        let model = v.get("modelID").and_then(|x| x.as_str()).map(|s| s.to_string());
-        let parent_id = v.get("parentID").and_then(|x| x.as_str()).map(|s| s.to_string());
+        let model = v
+            .get("modelID")
+            .and_then(|x| x.as_str())
+            .map(|s| s.to_string());
+        let parent_id = v
+            .get("parentID")
+            .and_then(|x| x.as_str())
+            .map(|s| s.to_string());
 
-        let ts = v.pointer("/time/created")
+        let ts = v
+            .pointer("/time/created")
             .and_then(|x| x.as_u64())
             .map(ms_to_utc);
 
@@ -212,20 +237,40 @@ pub fn parse_session(session: &CanonicalSession) -> Result<ParsedSession> {
             usage,
             tool_calls,
             is_sidechain: false,
-            finish_reason: v.get("finish").and_then(|x| x.as_str()).map(|s| s.to_string()),
+            finish_reason: v
+                .get("finish")
+                .and_then(|x| x.as_str())
+                .map(|s| s.to_string()),
         });
     }
 
-    Ok(ParsedSession { session: session.clone(), messages })
+    Ok(ParsedSession {
+        session: session.clone(),
+        messages,
+    })
 }
 
-fn extract_opencode_usage(v: &Value, cost: Option<f64>, latency_ms: Option<u64>, model: Option<&str>) -> Option<CanonicalUsage> {
+fn extract_opencode_usage(
+    v: &Value,
+    cost: Option<f64>,
+    latency_ms: Option<u64>,
+    model: Option<&str>,
+) -> Option<CanonicalUsage> {
     let tokens = v.get("tokens")?;
     let input = tokens.get("input").and_then(|x| x.as_u64()).unwrap_or(0);
     let output = tokens.get("output").and_then(|x| x.as_u64()).unwrap_or(0);
-    let reasoning = tokens.get("reasoning").and_then(|x| x.as_u64()).unwrap_or(0);
-    let cache_read = tokens.pointer("/cache/read").and_then(|x| x.as_u64()).unwrap_or(0);
-    let cache_write = tokens.pointer("/cache/write").and_then(|x| x.as_u64()).unwrap_or(0);
+    let reasoning = tokens
+        .get("reasoning")
+        .and_then(|x| x.as_u64())
+        .unwrap_or(0);
+    let cache_read = tokens
+        .pointer("/cache/read")
+        .and_then(|x| x.as_u64())
+        .unwrap_or(0);
+    let cache_write = tokens
+        .pointer("/cache/write")
+        .and_then(|x| x.as_u64())
+        .unwrap_or(0);
 
     let cost_estimated = if cost.is_none() {
         model.and_then(|m| tracekit_core::estimate_cost(m, input, output, cache_read, cache_write))
@@ -245,7 +290,10 @@ fn extract_opencode_usage(v: &Value, cost: Option<f64>, latency_ms: Option<u64>,
     })
 }
 
-fn load_parts(part_dir: &PathBuf, model: Option<&str>) -> Result<(Vec<CanonicalTool>, Option<CanonicalUsage>)> {
+fn load_parts(
+    part_dir: &PathBuf,
+    model: Option<&str>,
+) -> Result<(Vec<CanonicalTool>, Option<CanonicalUsage>)> {
     let mut tool_calls = Vec::new();
     let mut step_usage: Option<CanonicalUsage> = None;
 
@@ -278,12 +326,23 @@ fn load_parts(part_dir: &PathBuf, model: Option<&str>) -> Result<(Vec<CanonicalT
                 if let Some(tokens) = v.get("tokens") {
                     let input = tokens.get("input").and_then(|x| x.as_u64()).unwrap_or(0);
                     let output = tokens.get("output").and_then(|x| x.as_u64()).unwrap_or(0);
-                    let reasoning = tokens.get("reasoning").and_then(|x| x.as_u64()).unwrap_or(0);
-                    let cache_read = tokens.pointer("/cache/read").and_then(|x| x.as_u64()).unwrap_or(0);
-                    let cache_write = tokens.pointer("/cache/write").and_then(|x| x.as_u64()).unwrap_or(0);
+                    let reasoning = tokens
+                        .get("reasoning")
+                        .and_then(|x| x.as_u64())
+                        .unwrap_or(0);
+                    let cache_read = tokens
+                        .pointer("/cache/read")
+                        .and_then(|x| x.as_u64())
+                        .unwrap_or(0);
+                    let cache_write = tokens
+                        .pointer("/cache/write")
+                        .and_then(|x| x.as_u64())
+                        .unwrap_or(0);
 
                     let cost_estimated = if cost.is_none() {
-                        model.and_then(|m| tracekit_core::estimate_cost(m, input, output, cache_read, cache_write))
+                        model.and_then(|m| {
+                            tracekit_core::estimate_cost(m, input, output, cache_read, cache_write)
+                        })
                     } else {
                         None
                     };
@@ -314,18 +373,28 @@ fn load_parts(part_dir: &PathBuf, model: Option<&str>) -> Result<(Vec<CanonicalT
             }
 
             "tool" => {
-                let call_id = v.get("callID").and_then(|x| x.as_str()).unwrap_or("").to_string();
-                let tool_name = v.get("tool").and_then(|x| x.as_str()).unwrap_or("unknown").to_string();
+                let call_id = v
+                    .get("callID")
+                    .and_then(|x| x.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let tool_name = v
+                    .get("tool")
+                    .and_then(|x| x.as_str())
+                    .unwrap_or("unknown")
+                    .to_string();
 
-                let status_str = v.pointer("/state/status").and_then(|x| x.as_str()).unwrap_or("unknown");
+                let status_str = v
+                    .pointer("/state/status")
+                    .and_then(|x| x.as_str())
+                    .unwrap_or("unknown");
                 let status = match status_str {
                     "completed" => ToolStatus::Success,
                     "error" => ToolStatus::Error,
                     _ => ToolStatus::Unknown,
                 };
 
-                let args_summary = v.pointer("/state/input")
-                    .map(|x| extract_opencode_args(x));
+                let args_summary = v.pointer("/state/input").map(|x| extract_opencode_args(x));
 
                 let err_msg = if status == ToolStatus::Error {
                     v.pointer("/state/output")
@@ -347,7 +416,11 @@ fn load_parts(part_dir: &PathBuf, model: Option<&str>) -> Result<(Vec<CanonicalT
                     tool_name,
                     call_id,
                     status,
-                    error_class: if status == ToolStatus::Error { Some("tool_error".to_string()) } else { None },
+                    error_class: if status == ToolStatus::Error {
+                        Some("tool_error".to_string())
+                    } else {
+                        None
+                    },
                     error_message: err_msg,
                     args_summary,
                     output_summary: None,

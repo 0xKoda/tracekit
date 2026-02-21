@@ -78,7 +78,11 @@ fn analyze_session_by_id(session_id: &str, agent: &str, top_n: usize) -> Result<
     let session = ingest::find_session(session_id, &agents)?
         .ok_or_else(|| anyhow::anyhow!("No session found matching '{}'", session_id))?;
 
-    eprintln!("{} Parsing session {}...", "→".cyan(), &session.session_id[..8.min(session.session_id.len())]);
+    eprintln!(
+        "{} Parsing session {}...",
+        "→".cyan(),
+        &session.session_id[..8.min(session.session_id.len())]
+    );
     let parsed = ingest::parse_session(&session)?;
     let findings = detect_inefficiencies(&parsed);
     let top_expensive = top_expensive_messages(&parsed, top_n);
@@ -130,26 +134,29 @@ pub fn run(args: AnalyzeArgs) -> Result<()> {
 
             eprintln!("{} Analyzing {} sessions...", "→".cyan(), sessions.len());
 
-            let results: Vec<AnalysisResult> = sessions.iter().map(|s| {
-                let parsed = match ingest::parse_session(s) {
-                    Ok(p) => p,
-                    Err(e) => {
-                        eprintln!("  {} {}: {}", "!".yellow(), s.session_id, e);
-                        return AnalysisResult {
-                            session: s.clone(),
-                            findings: Vec::new(),
-                            top_expensive_messages: Vec::new(),
-                        };
+            let results: Vec<AnalysisResult> = sessions
+                .iter()
+                .map(|s| {
+                    let parsed = match ingest::parse_session(s) {
+                        Ok(p) => p,
+                        Err(e) => {
+                            eprintln!("  {} {}: {}", "!".yellow(), s.session_id, e);
+                            return AnalysisResult {
+                                session: s.clone(),
+                                findings: Vec::new(),
+                                top_expensive_messages: Vec::new(),
+                            };
+                        }
+                    };
+                    let findings = detect_inefficiencies(&parsed);
+                    let top = top_expensive_messages(&parsed, 3);
+                    AnalysisResult {
+                        session: parsed.session,
+                        findings,
+                        top_expensive_messages: top,
                     }
-                };
-                let findings = detect_inefficiencies(&parsed);
-                let top = top_expensive_messages(&parsed, 3);
-                AnalysisResult {
-                    session: parsed.session,
-                    findings,
-                    top_expensive_messages: top,
-                }
-            }).collect();
+                })
+                .collect();
 
             match format.as_str() {
                 "json" => println!("{}", jreport::render_aggregate(&results)?),
@@ -176,20 +183,25 @@ pub fn run(args: AnalyzeArgs) -> Result<()> {
 
             eprintln!("{} Analyzing {} sessions...", "→".cyan(), sessions.len());
 
-            let mut results: Vec<AnalysisResult> = sessions.iter().filter_map(|s| {
-                let parsed = ingest::parse_session(s).ok()?;
-                let findings = detect_inefficiencies(&parsed);
-                let top_msgs = top_expensive_messages(&parsed, 5);
-                Some(AnalysisResult {
-                    session: parsed.session,
-                    findings,
-                    top_expensive_messages: top_msgs,
+            let mut results: Vec<AnalysisResult> = sessions
+                .iter()
+                .filter_map(|s| {
+                    let parsed = ingest::parse_session(s).ok()?;
+                    let findings = detect_inefficiencies(&parsed);
+                    let top_msgs = top_expensive_messages(&parsed, 5);
+                    Some(AnalysisResult {
+                        session: parsed.session,
+                        findings,
+                        top_expensive_messages: top_msgs,
+                    })
                 })
-            }).collect();
+                .collect();
 
             // Sort by cost descending
             results.sort_by(|a, b| {
-                b.session.total_cost_usd.unwrap_or(0.0)
+                b.session
+                    .total_cost_usd
+                    .unwrap_or(0.0)
                     .partial_cmp(&a.session.total_cost_usd.unwrap_or(0.0))
                     .unwrap_or(std::cmp::Ordering::Equal)
             });

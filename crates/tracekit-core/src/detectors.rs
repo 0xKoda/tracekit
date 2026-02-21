@@ -7,7 +7,8 @@ pub fn detect_inefficiencies(parsed: &ParsedSession) -> Vec<Finding> {
     let msgs = &parsed.messages;
 
     // Build per-sequence cost lookup for waste estimation
-    let cost_map: HashMap<usize, f64> = msgs.iter()
+    let cost_map: HashMap<usize, f64> = msgs
+        .iter()
         .filter_map(|m| {
             let cost = m.usage.as_ref()?.effective_cost()?;
             Some((m.sequence, cost))
@@ -36,14 +37,15 @@ pub fn detect_inefficiencies(parsed: &ParsedSession) -> Vec<Finding> {
 fn detect_retry_loops(msgs: &[CanonicalMessage], cost_map: &HashMap<usize, f64>) -> Vec<Finding> {
     let mut findings = Vec::new();
 
-    let assistant_msgs: Vec<&CanonicalMessage> = msgs.iter()
-        .filter(|m| m.role == Role::Assistant)
-        .collect();
+    let assistant_msgs: Vec<&CanonicalMessage> =
+        msgs.iter().filter(|m| m.role == Role::Assistant).collect();
 
     let mut reported: HashSet<(usize, String)> = HashSet::new();
 
     for (i, amsg) in assistant_msgs.iter().enumerate() {
-        let error_calls: Vec<&CanonicalTool> = amsg.tool_calls.iter()
+        let error_calls: Vec<&CanonicalTool> = amsg
+            .tool_calls
+            .iter()
             .filter(|t| t.status == ToolStatus::Error)
             .collect();
 
@@ -60,7 +62,10 @@ fn detect_retry_loops(msgs: &[CanonicalMessage], cost_map: &HashMap<usize, f64>)
             let mut chain = vec![(amsg.sequence, err_tool.tool_name.clone())];
 
             for next in assistant_msgs.iter().skip(i + 1).take(5) {
-                let retry = next.tool_calls.iter().any(|t| t.tool_name == err_tool.tool_name);
+                let retry = next
+                    .tool_calls
+                    .iter()
+                    .any(|t| t.tool_name == err_tool.tool_name);
                 if retry {
                     chain.push((next.sequence, err_tool.tool_name.clone()));
                 } else {
@@ -74,12 +79,14 @@ fn detect_retry_loops(msgs: &[CanonicalMessage], cost_map: &HashMap<usize, f64>)
                 }
 
                 // Waste = cost of all retry turns (skip first — that was the initial attempt)
-                let wasted: f64 = chain[1..].iter()
+                let wasted: f64 = chain[1..]
+                    .iter()
                     .filter_map(|(seq, _)| cost_map.get(seq))
                     .sum();
 
                 let tool_name = chain[0].1.clone();
-                let evidence: Vec<String> = chain.iter()
+                let evidence: Vec<String> = chain
+                    .iter()
                     .map(|(seq, name)| format!("turn {}: {}", seq, name))
                     .collect();
 
@@ -105,12 +112,17 @@ fn detect_retry_loops(msgs: &[CanonicalMessage], cost_map: &HashMap<usize, f64>)
 /// Detect repeated failed Edit/Write/Patch calls on the same file.
 fn detect_edit_cascades(msgs: &[CanonicalMessage], cost_map: &HashMap<usize, f64>) -> Vec<Finding> {
     let mut findings = Vec::new();
-    let edit_tools = ["edit", "write", "str_replace_based_edit", "apply_patch",
-                      "str_replace_editor", "replace_in_file"];
+    let edit_tools = [
+        "edit",
+        "write",
+        "str_replace_based_edit",
+        "apply_patch",
+        "str_replace_editor",
+        "replace_in_file",
+    ];
 
-    let assistant_msgs: Vec<&CanonicalMessage> = msgs.iter()
-        .filter(|m| m.role == Role::Assistant)
-        .collect();
+    let assistant_msgs: Vec<&CanonicalMessage> =
+        msgs.iter().filter(|m| m.role == Role::Assistant).collect();
 
     let mut file_edits: HashMap<String, Vec<usize>> = HashMap::new();
 
@@ -120,7 +132,10 @@ fn detect_edit_cascades(msgs: &[CanonicalMessage], cost_map: &HashMap<usize, f64
             let is_edit = edit_tools.iter().any(|e| name_lower.contains(e));
             if is_edit && tool.status == ToolStatus::Error {
                 if let Some(ref args) = tool.args_summary {
-                    file_edits.entry(args.clone()).or_default().push(amsg.sequence);
+                    file_edits
+                        .entry(args.clone())
+                        .or_default()
+                        .push(amsg.sequence);
                 }
             }
         }
@@ -129,9 +144,7 @@ fn detect_edit_cascades(msgs: &[CanonicalMessage], cost_map: &HashMap<usize, f64
     for (path, seqs) in &file_edits {
         if seqs.len() >= 2 {
             // Waste = cost of all repeat turns after the first
-            let wasted: f64 = seqs[1..].iter()
-                .filter_map(|seq| cost_map.get(seq))
-                .sum();
+            let wasted: f64 = seqs[1..].iter().filter_map(|seq| cost_map.get(seq)).sum();
 
             findings.push(Finding {
                 kind: FindingKind::EditCascade,
@@ -156,9 +169,8 @@ fn detect_tool_fanout(msgs: &[CanonicalMessage]) -> Vec<Finding> {
     let mut findings = Vec::new();
     let batch_threshold = 4usize;
 
-    let assistant_msgs: Vec<&CanonicalMessage> = msgs.iter()
-        .filter(|m| m.role == Role::Assistant)
-        .collect();
+    let assistant_msgs: Vec<&CanonicalMessage> =
+        msgs.iter().filter(|m| m.role == Role::Assistant).collect();
 
     for amsg in &assistant_msgs {
         let mut counts: HashMap<&str, usize> = HashMap::new();
@@ -189,15 +201,21 @@ fn detect_tool_fanout(msgs: &[CanonicalMessage]) -> Vec<Finding> {
 fn detect_redundant_rereads(msgs: &[CanonicalMessage]) -> Vec<Finding> {
     let mut findings = Vec::new();
     let read_tools = ["read", "cat", "view", "open", "read_file"];
-    let write_tools = ["write", "edit", "str_replace", "apply_patch", "replace_in_file",
-                       "create_file", "delete_file"];
+    let write_tools = [
+        "write",
+        "edit",
+        "str_replace",
+        "apply_patch",
+        "replace_in_file",
+        "create_file",
+        "delete_file",
+    ];
 
     let mut last_written: HashMap<String, usize> = HashMap::new();
     let mut read_count: HashMap<String, Vec<usize>> = HashMap::new();
 
-    let assistant_msgs: Vec<&CanonicalMessage> = msgs.iter()
-        .filter(|m| m.role == Role::Assistant)
-        .collect();
+    let assistant_msgs: Vec<&CanonicalMessage> =
+        msgs.iter().filter(|m| m.role == Role::Assistant).collect();
 
     for amsg in &assistant_msgs {
         for tool in &amsg.tool_calls {
@@ -250,7 +268,8 @@ fn detect_context_bloat(msgs: &[CanonicalMessage]) -> Vec<Finding> {
     // Use total_billed_input (input + cache_read + cache_write) as the signal —
     // this catches both massive cache writes (initial injections) and cache reads
     // that spike because the context grew unexpectedly large.
-    let billed_counts: Vec<(usize, u64, f64)> = msgs.iter()
+    let billed_counts: Vec<(usize, u64, f64)> = msgs
+        .iter()
         .filter(|m| m.role == Role::Assistant)
         .filter_map(|m| {
             let u = m.usage.as_ref()?;
@@ -263,8 +282,8 @@ fn detect_context_bloat(msgs: &[CanonicalMessage]) -> Vec<Finding> {
         return findings;
     }
 
-    let mean: f64 = billed_counts.iter().map(|(_, t, _)| *t as f64).sum::<f64>()
-        / billed_counts.len() as f64;
+    let mean: f64 =
+        billed_counts.iter().map(|(_, t, _)| *t as f64).sum::<f64>() / billed_counts.len() as f64;
 
     // Flag turns with >2.5x average billed input and a minimum absolute threshold
     let threshold = (mean * 2.5) as u64;
@@ -317,12 +336,13 @@ fn detect_error_reprompt_churn(
     let mut prev_error_tools: Vec<String> = Vec::new();
     let mut reported_churn: HashSet<usize> = HashSet::new();
 
-    let assistant_msgs: Vec<&CanonicalMessage> = msgs.iter()
-        .filter(|m| m.role == Role::Assistant)
-        .collect();
+    let assistant_msgs: Vec<&CanonicalMessage> =
+        msgs.iter().filter(|m| m.role == Role::Assistant).collect();
 
     for amsg in &assistant_msgs {
-        let error_tools: Vec<String> = amsg.tool_calls.iter()
+        let error_tools: Vec<String> = amsg
+            .tool_calls
+            .iter()
             .filter(|t| t.status == ToolStatus::Error)
             .map(|t| t.tool_name.clone())
             .collect();
@@ -346,7 +366,8 @@ fn detect_error_reprompt_churn(
             if consecutive_errors >= 3 && !reported_churn.contains(&error_start_seq) {
                 reported_churn.insert(error_start_seq);
                 // Waste = cost of all churn turns beyond the first
-                let wasted: f64 = churn_seqs[1..].iter()
+                let wasted: f64 = churn_seqs[1..]
+                    .iter()
                     .filter_map(|seq| cost_map.get(seq))
                     .sum();
                 findings.push(Finding {
@@ -369,7 +390,8 @@ fn detect_error_reprompt_churn(
 
     // Flush at end
     if consecutive_errors >= 3 && !reported_churn.contains(&error_start_seq) {
-        let wasted: f64 = churn_seqs[1..].iter()
+        let wasted: f64 = churn_seqs[1..]
+            .iter()
             .filter_map(|seq| cost_map.get(seq))
             .sum();
         findings.push(Finding {
@@ -395,12 +417,14 @@ fn detect_subagent_overhead(msgs: &[CanonicalMessage]) -> Vec<Finding> {
         return Vec::new();
     }
 
-    let sidechain_cost: f64 = msgs.iter()
+    let sidechain_cost: f64 = msgs
+        .iter()
         .filter(|m| m.is_sidechain)
         .filter_map(|m| m.usage.as_ref()?.effective_cost())
         .sum();
 
-    let sidechain_tokens: u64 = msgs.iter()
+    let sidechain_tokens: u64 = msgs
+        .iter()
         .filter(|m| m.is_sidechain)
         .filter_map(|m| m.usage.as_ref())
         .map(|u| u.total_billed_input() + u.output_tokens)
@@ -412,19 +436,27 @@ fn detect_subagent_overhead(msgs: &[CanonicalMessage]) -> Vec<Finding> {
             "{} sidechain/subagent messages — check if tasks could be inlined",
             sidechain_count
         ),
-        evidence: vec![
-            format!("{} subagent turns, {} tokens, ${:.4} cost",
-                sidechain_count, fmt_tokens_plain(sidechain_tokens), sidechain_cost)
-        ],
+        evidence: vec![format!(
+            "{} subagent turns, {} tokens, ${:.4} cost",
+            sidechain_count,
+            fmt_tokens_plain(sidechain_tokens),
+            sidechain_cost
+        )],
         wasted_tokens: Some(sidechain_tokens / 4),
-        wasted_cost_usd: if sidechain_cost > 0.0 { Some(sidechain_cost * 0.25) } else { None },
+        wasted_cost_usd: if sidechain_cost > 0.0 {
+            Some(sidechain_cost * 0.25)
+        } else {
+            None
+        },
         confidence: 0.50,
     }]
 }
 
 /// Build top-N expensive messages list
 pub fn top_expensive_messages(parsed: &ParsedSession, top_n: usize) -> Vec<ExpensiveMessage> {
-    let mut messages: Vec<ExpensiveMessage> = parsed.messages.iter()
+    let mut messages: Vec<ExpensiveMessage> = parsed
+        .messages
+        .iter()
         .filter(|m| m.role == Role::Assistant)
         .filter_map(|m| {
             let u = m.usage.as_ref()?;
@@ -442,7 +474,11 @@ pub fn top_expensive_messages(parsed: &ParsedSession, top_n: usize) -> Vec<Expen
         })
         .collect();
 
-    messages.sort_by(|a, b| b.cost_usd.partial_cmp(&a.cost_usd).unwrap_or(std::cmp::Ordering::Equal));
+    messages.sort_by(|a, b| {
+        b.cost_usd
+            .partial_cmp(&a.cost_usd)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     messages.truncate(top_n);
     messages
 }

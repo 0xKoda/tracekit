@@ -70,10 +70,15 @@ pub fn print_session_list(sessions: &[CanonicalSession]) {
         w4 = w_msgs,
         w5 = w_cost,
     );
-    println!("{}", "─".repeat(w_agent + w_id + w_cwd + w_ts + w_msgs + w_cost + 10));
+    println!(
+        "{}",
+        "─".repeat(w_agent + w_id + w_cwd + w_ts + w_msgs + w_cost + 10)
+    );
 
     for s in sessions {
-        let cwd_display = s.cwd.as_deref()
+        let cwd_display = s
+            .cwd
+            .as_deref()
             .map(|c| {
                 let home = std::env::var("HOME").unwrap_or_default();
                 if !home.is_empty() && c.starts_with(&home) {
@@ -116,7 +121,10 @@ pub fn print_session_list(sessions: &[CanonicalSession]) {
 pub fn print_analysis(result: &AnalysisResult) {
     let s = &result.session;
 
-    println!("\n{}", "── Session ─────────────────────────────────────────────────────".bold());
+    println!(
+        "\n{}",
+        "── Session ─────────────────────────────────────────────────────".bold()
+    );
     println!("  Agent      : {}", s.source_agent.to_string().cyan());
     println!("  Session ID : {}", s.session_id);
     println!("  Path       : {}", s.source_path.display());
@@ -131,18 +139,29 @@ pub fn print_analysis(result: &AnalysisResult) {
     println!("  Messages   : {}", s.message_count);
     println!("  Input tok  : {}", fmt_tokens(s.total_input_tokens));
     println!("  Output tok : {}", fmt_tokens(s.total_output_tokens));
-    println!("  Total cost : {}", fmt_cost(s.total_cost_usd).green().bold().to_string());
+    println!(
+        "  Total cost : {}",
+        fmt_cost(s.total_cost_usd).green().bold().to_string()
+    );
 
-    let total_waste: f64 = result.findings.iter()
+    let total_waste: f64 = result
+        .findings
+        .iter()
         .filter_map(|f| f.wasted_cost_usd)
         .sum();
     if total_waste > 0.0 {
-        println!("  Identified waste : {}", format!("~${:.2}", total_waste).red().bold().to_string());
+        println!(
+            "  Identified waste : {}",
+            format!("~${:.2}", total_waste).red().bold().to_string()
+        );
     }
 
     // Top expensive messages
     if !result.top_expensive_messages.is_empty() {
-        println!("\n{}", "── Top Expensive Generations ───────────────────────────────────".bold());
+        println!(
+            "\n{}",
+            "── Top Expensive Generations ───────────────────────────────────".bold()
+        );
         for (i, m) in result.top_expensive_messages.iter().enumerate() {
             println!(
                 "  {}. turn {:>4}  {:>10}  in:{:>8}  out:{:>7}  tools:{}",
@@ -160,12 +179,17 @@ pub fn print_analysis(result: &AnalysisResult) {
     if result.findings.is_empty() {
         println!("\n{}", "No inefficiency findings.".green());
     } else {
-        println!("\n{}", "── Inefficiency Findings ───────────────────────────────────────".bold());
+        println!(
+            "\n{}",
+            "── Inefficiency Findings ───────────────────────────────────────".bold()
+        );
         for (i, f) in result.findings.iter().enumerate() {
             let kind_str = format!("[{}]", f.kind).red().bold().to_string();
             let conf = format!("(conf {:.0}%)", f.confidence * 100.0).dimmed();
             let waste = match f.wasted_cost_usd {
-                Some(c) if c > 0.0 => format!(" ~{} wasted", fmt_cost(Some(c))).yellow().to_string(),
+                Some(c) if c > 0.0 => format!(" ~{} wasted", fmt_cost(Some(c)))
+                    .yellow()
+                    .to_string(),
                 _ => String::new(),
             };
             println!("\n  {}. {} {}{}", i + 1, kind_str, conf, waste);
@@ -187,8 +211,12 @@ pub fn print_aggregate(results: &[AnalysisResult]) {
         return;
     }
 
-    println!("\n{}", "── Aggregate Summary ───────────────────────────────────────────".bold());
-    let total_cost: f64 = results.iter()
+    println!(
+        "\n{}",
+        "── Aggregate Summary ───────────────────────────────────────────".bold()
+    );
+    let total_cost: f64 = results
+        .iter()
         .filter_map(|r| r.session.total_cost_usd)
         .sum();
     let total_msgs: usize = results.iter().map(|r| r.session.message_count).sum();
@@ -196,13 +224,21 @@ pub fn print_aggregate(results: &[AnalysisResult]) {
 
     println!("  Sessions analyzed : {}", results.len());
     println!("  Total messages    : {}", total_msgs);
-    println!("  Total cost        : {}", fmt_cost(Some(total_cost)).green().bold().to_string());
+    println!(
+        "  Total cost        : {}",
+        fmt_cost(Some(total_cost)).green().bold().to_string()
+    );
     println!("  Total findings    : {}", total_findings);
 
-    println!("\n{}", "── Top Sessions by Cost ────────────────────────────────────────".bold());
+    println!(
+        "\n{}",
+        "── Top Sessions by Cost ────────────────────────────────────────".bold()
+    );
     let mut sorted: Vec<&AnalysisResult> = results.iter().collect();
     sorted.sort_by(|a, b| {
-        b.session.total_cost_usd.unwrap_or(0.0)
+        b.session
+            .total_cost_usd
+            .unwrap_or(0.0)
             .partial_cmp(&a.session.total_cost_usd.unwrap_or(0.0))
             .unwrap_or(std::cmp::Ordering::Equal)
     });
@@ -221,14 +257,18 @@ pub fn print_aggregate(results: &[AnalysisResult]) {
     }
 
     // Most common finding types
-    let mut finding_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    let mut finding_counts: std::collections::HashMap<String, usize> =
+        std::collections::HashMap::new();
     for r in results {
         for f in &r.findings {
             *finding_counts.entry(f.kind.to_string()).or_default() += 1;
         }
     }
     if !finding_counts.is_empty() {
-        println!("\n{}", "── Most Common Inefficiencies ──────────────────────────────────".bold());
+        println!(
+            "\n{}",
+            "── Most Common Inefficiencies ──────────────────────────────────".bold()
+        );
         let mut counts: Vec<(String, usize)> = finding_counts.into_iter().collect();
         counts.sort_by(|a, b| b.1.cmp(&a.1));
         for (kind, count) in counts.iter().take(7) {
@@ -242,17 +282,25 @@ pub fn print_aggregate(results: &[AnalysisResult]) {
 pub fn print_expensive_sessions(results: &[AnalysisResult], top_n: usize) {
     let mut sorted: Vec<&AnalysisResult> = results.iter().collect();
     sorted.sort_by(|a, b| {
-        b.session.total_cost_usd.unwrap_or(0.0)
+        b.session
+            .total_cost_usd
+            .unwrap_or(0.0)
             .partial_cmp(&a.session.total_cost_usd.unwrap_or(0.0))
             .unwrap_or(std::cmp::Ordering::Equal)
     });
     sorted.truncate(top_n);
 
-    println!("\n{}", "── Most Expensive Sessions ─────────────────────────────────────".bold());
+    println!(
+        "\n{}",
+        "── Most Expensive Sessions ─────────────────────────────────────".bold()
+    );
     for (i, r) in sorted.iter().enumerate() {
         print_analysis(r);
         if i < sorted.len() - 1 {
-            println!("{}", "────────────────────────────────────────────────────────────────".dimmed());
+            println!(
+                "{}",
+                "────────────────────────────────────────────────────────────────".dimmed()
+            );
         }
     }
 }

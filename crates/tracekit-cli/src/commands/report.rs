@@ -68,7 +68,11 @@ fn analyze_one(session_id: &str, agent: &str) -> Result<AnalysisResult> {
     let session = ingest::find_session(session_id, &agents)?
         .ok_or_else(|| anyhow::anyhow!("No session found matching '{}'", session_id))?;
 
-    eprintln!("{} Parsing {}...", "→".cyan(), &session.session_id[..8.min(session.session_id.len())]);
+    eprintln!(
+        "{} Parsing {}...",
+        "→".cyan(),
+        &session.session_id[..8.min(session.session_id.len())]
+    );
     let parsed = ingest::parse_session(&session)?;
     let findings = detect_inefficiencies(&parsed);
     let top = top_expensive_messages(&parsed, 10);
@@ -142,8 +146,9 @@ pub fn run(args: ReportArgs) -> Result<()> {
 
             eprintln!("{} Analyzing {} sessions...", "→".cyan(), sessions.len());
 
-            let results: Vec<AnalysisResult> = sessions.iter().filter_map(|s| {
-                match ingest::parse_session(s) {
+            let results: Vec<AnalysisResult> = sessions
+                .iter()
+                .filter_map(|s| match ingest::parse_session(s) {
                     Ok(parsed) => {
                         let findings = detect_inefficiencies(&parsed);
                         let top = top_expensive_messages(&parsed, 5);
@@ -157,8 +162,8 @@ pub fn run(args: ReportArgs) -> Result<()> {
                         eprintln!("  {} {}: {}", "!".yellow(), s.session_id, e);
                         None
                     }
-                }
-            }).collect();
+                })
+                .collect();
 
             match format.as_str() {
                 "json" => {

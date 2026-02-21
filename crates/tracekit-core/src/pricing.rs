@@ -36,7 +36,11 @@ pub fn lookup_price(model_id: &str) -> Option<ModelPrice> {
     if m.contains("claude-opus-4") || m.contains("claude-4-opus") {
         return Some(ModelPrice::new(15.0, 75.0, 1.50, 3.75));
     }
-    if m.contains("claude-sonnet-4") || m.contains("claude-4-sonnet") || m.contains("claude-4-5") || m.contains("claude-sonnet-4-5") {
+    if m.contains("claude-sonnet-4")
+        || m.contains("claude-4-sonnet")
+        || m.contains("claude-4-5")
+        || m.contains("claude-sonnet-4-5")
+    {
         return Some(ModelPrice::new(3.0, 15.0, 0.30, 3.75));
     }
     if m.contains("claude-haiku-4") || m.contains("claude-4-haiku") || m.contains("haiku-4-5") {
@@ -111,5 +115,10 @@ pub fn estimate_cost(
     cache_write_tokens: u64,
 ) -> Option<f64> {
     let price = lookup_price(model_id)?;
-    Some(price.estimate_cost(input_tokens, output_tokens, cache_read_tokens, cache_write_tokens))
+    Some(price.estimate_cost(
+        input_tokens,
+        output_tokens,
+        cache_read_tokens,
+        cache_write_tokens,
+    ))
 }

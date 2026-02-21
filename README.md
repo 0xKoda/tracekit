@@ -79,6 +79,11 @@ Discover and inspect sessions without full analysis.
 tracekit capture all --agent all
 tracekit capture recent --agent claude --limit 20
 tracekit capture session --session-id <id>
+tracekit capture session --session-id <id> --inspect-file
+tracekit capture session --session-id <id> --inspect-file --inspect-mode analysis
+tracekit capture session --session-id <id> --inspect-file --inspect-mode forensic
+tracekit capture session --session-id <id> --inspect-terminal
+tracekit capture session --session-id <id> --inspect-file --inspect-terminal
 ```
 
 ### `list sessions`

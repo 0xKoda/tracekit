@@ -1,7 +1,6 @@
 /// Codex (ChatGPT Codex) session adapter.
 /// Format: ~/.codex/sessions/YYYY/MM/DD/rollout-<ts>-<uuid>.jsonl
 /// Each line: {"timestamp": "...", "type": "session_meta"|"response_item"|"event_msg", "payload": {...}}
-
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde_json::Value;
@@ -56,7 +55,7 @@ fn probe_session(path: &Path) -> Result<CanonicalSession> {
     let mut model: Option<String> = None;
     let mut message_count = 0usize;
 
-    for line in content.lines().take(30) {
+    for line in content.lines() {
         if line.trim().is_empty() {
             continue;
         }
@@ -70,8 +69,14 @@ fn probe_session(path: &Path) -> Result<CanonicalSession> {
         match kind {
             "session_meta" => {
                 let payload = record.get("payload").unwrap_or(&Value::Null);
-                session_id = payload.get("id").and_then(|v| v.as_str()).map(|s| s.to_string());
-                cwd = payload.get("cwd").and_then(|v| v.as_str()).map(|s| s.to_string());
+                session_id = payload
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+                cwd = payload
+                    .get("cwd")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
                 if let Some(ts) = payload.get("timestamp").and_then(|v| v.as_str()) {
                     started_at = ts.parse().ok();
                 }
@@ -82,8 +87,19 @@ fn probe_session(path: &Path) -> Result<CanonicalSession> {
             "response_item" => {
                 let payload = record.get("payload").unwrap_or(&Value::Null);
                 let ptype = payload.get("type").and_then(|v| v.as_str()).unwrap_or("");
-                if matches!(ptype, "agent_message" | "output_text") {
-                    message_count += 1;
+                match ptype {
+                    // Modern Codex rollout format: message items with explicit role.
+                    "message" => {
+                        let role = payload.get("role").and_then(|v| v.as_str()).unwrap_or("");
+                        if matches!(role, "user" | "assistant") {
+                            message_count += 1;
+                        }
+                    }
+                    // Legacy/alternative message item types.
+                    "user_message" | "agent_message" | "output_text" => {
+                        message_count += 1;
+                    }
+                    _ => {}
                 }
             }
             _ => {}
@@ -192,9 +208,20 @@ pub fn parse_session(session: &CanonicalSession) -> Result<ParsedSession> {
                         if current_ts.is_none() {
                             current_ts = ts;
                         }
-                        let call_id = payload.get("call_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                        let name = payload.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                        let args = payload.get("arguments").and_then(|v| v.as_str()).unwrap_or("{}");
+                        let call_id = payload
+                            .get("call_id")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string();
+                        let name = payload
+                            .get("name")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string();
+                        let args = payload
+                            .get("arguments")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("{}");
                         let args_summary = extract_codex_args(args, &name);
 
                         pending_calls.insert(call_id.clone(), name.clone());
@@ -211,11 +238,18 @@ pub fn parse_session(session: &CanonicalSession) -> Result<ParsedSession> {
                     }
 
                     "function_call_output" => {
-                        let call_id = payload.get("call_id").and_then(|v| v.as_str()).unwrap_or("");
+                        let call_id = payload
+                            .get("call_id")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("");
                         let output = payload.get("output").and_then(|v| v.as_str()).unwrap_or("");
 
                         let is_error = output_looks_like_error(output);
-                        let status = if is_error { ToolStatus::Error } else { ToolStatus::Success };
+                        let status = if is_error {
+                            ToolStatus::Error
+                        } else {
+                            ToolStatus::Success
+                        };
 
                         // Update the pending tool call
                         for tool in current_tool_calls.iter_mut() {
@@ -250,8 +284,16 @@ pub fn parse_session(session: &CanonicalSession) -> Result<ParsedSession> {
                     "custom_tool_call" => {
                         // Similar to function_call
                         in_turn = true;
-                        let call_id = payload.get("call_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                        let name = payload.get("name").and_then(|v| v.as_str()).unwrap_or("custom_tool").to_string();
+                        let call_id = payload
+                            .get("call_id")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string();
+                        let name = payload
+                            .get("name")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("custom_tool")
+                            .to_string();
                         pending_calls.insert(call_id.clone(), name.clone());
                         current_tool_calls.push(CanonicalTool {
                             tool_name: name,
@@ -266,16 +308,27 @@ pub fn parse_session(session: &CanonicalSession) -> Result<ParsedSession> {
                     }
 
                     "custom_tool_call_output" => {
-                        let call_id = payload.get("call_id").and_then(|v| v.as_str()).unwrap_or("");
-                        let output = payload.get("output").and_then(|v| {
-                            v.as_str().map(|s| s.to_string())
-                                .or_else(|| serde_json::to_string(v).ok())
-                        }).unwrap_or_default();
+                        let call_id = payload
+                            .get("call_id")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("");
+                        let output = payload
+                            .get("output")
+                            .and_then(|v| {
+                                v.as_str()
+                                    .map(|s| s.to_string())
+                                    .or_else(|| serde_json::to_string(v).ok())
+                            })
+                            .unwrap_or_default();
                         let is_error = output_looks_like_error(&output);
 
                         for tool in current_tool_calls.iter_mut() {
                             if tool.call_id == call_id {
-                                tool.status = if is_error { ToolStatus::Error } else { ToolStatus::Success };
+                                tool.status = if is_error {
+                                    ToolStatus::Error
+                                } else {
+                                    ToolStatus::Success
+                                };
                                 if is_error {
                                     tool.error_class = Some("exec_error".to_string());
                                     tool.error_message = Some(output.chars().take(200).collect());
@@ -299,10 +352,19 @@ pub fn parse_session(session: &CanonicalSession) -> Result<ParsedSession> {
 
     // Flush any remaining turn
     if in_turn || !current_tool_calls.is_empty() {
-        flush_assistant_turn(&mut messages, &mut seq, session, &mut current_tool_calls, current_ts);
+        flush_assistant_turn(
+            &mut messages,
+            &mut seq,
+            session,
+            &mut current_tool_calls,
+            current_ts,
+        );
     }
 
-    Ok(ParsedSession { session: session.clone(), messages })
+    Ok(ParsedSession {
+        session: session.clone(),
+        messages,
+    })
 }
 
 fn flush_assistant_turn(
@@ -361,7 +423,8 @@ fn extract_codex_args(args_json: &str, tool_name: &str) -> Option<String> {
 fn output_looks_like_error(output: &str) -> bool {
     let lower = output.to_lowercase();
     // Check for common error indicators
-    lower.contains("error") && (lower.contains("exit code") || lower.contains("failed") || lower.contains("not found"))
+    lower.contains("error")
+        && (lower.contains("exit code") || lower.contains("failed") || lower.contains("not found"))
         || lower.starts_with("error:")
         || lower.contains("command not found")
         || lower.contains("permission denied")

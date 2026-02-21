@@ -10,11 +10,13 @@ pub fn render_session_list(sessions: &[CanonicalSession]) -> Result<String> {
 }
 
 pub fn render_aggregate(results: &[AnalysisResult]) -> Result<String> {
-    let total_cost: f64 = results.iter()
+    let total_cost: f64 = results
+        .iter()
         .filter_map(|r| r.session.total_cost_usd)
         .sum();
 
-    let mut finding_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    let mut finding_counts: std::collections::HashMap<String, usize> =
+        std::collections::HashMap::new();
     for r in results {
         for f in &r.findings {
             *finding_counts.entry(f.kind.to_string()).or_default() += 1;

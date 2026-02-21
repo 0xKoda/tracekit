@@ -173,7 +173,9 @@ impl ParsedSession {
         }
 
         // Include cache tokens in the input total for display (cache write + read)
-        let total_cache: u64 = self.messages.iter()
+        let total_cache: u64 = self
+            .messages
+            .iter()
             .filter_map(|m| m.usage.as_ref())
             .map(|u| u.cache_read_tokens + u.cache_write_tokens)
             .sum();
@@ -185,10 +187,7 @@ impl ParsedSession {
         self.session.message_count = self.messages.len();
 
         // Infer timestamps from messages
-        let timestamps: Vec<DateTime<Utc>> = self.messages
-            .iter()
-            .filter_map(|m| m.ts)
-            .collect();
+        let timestamps: Vec<DateTime<Utc>> = self.messages.iter().filter_map(|m| m.ts).collect();
         if !timestamps.is_empty() {
             if self.session.started_at.is_none() {
                 self.session.started_at = timestamps.iter().copied().min();
@@ -200,7 +199,8 @@ impl ParsedSession {
 
         // Pick the most common model
         if self.session.model.is_none() {
-            let mut models: Vec<&str> = self.messages
+            let mut models: Vec<&str> = self
+                .messages
                 .iter()
                 .filter_map(|m| m.model.as_deref())
                 .collect();

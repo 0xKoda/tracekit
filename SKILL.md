@@ -119,3 +119,4 @@ tracekit report aggregate --since $(date -u -v-7d +%Y-%m-%d) --format html --out
 - Codex rollout files don't include per-call token counts; only structural analysis is available
 - Session IDs support prefix matching (first 8 chars usually sufficient)
 - Use `--agent all` (default) to search across all installed agents
+- Inspect where tokens were wasted, and update your agents md file to avoid those paths in future

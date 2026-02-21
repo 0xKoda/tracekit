@@ -2,6 +2,7 @@
 /target/
 **/*.rs.bk
 
+
 # Generated report files (contain session data)
 report*.html
 report*.json
@@ -33,3 +34,6 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+article.md
+GROWTH.md
+inspect-traces/

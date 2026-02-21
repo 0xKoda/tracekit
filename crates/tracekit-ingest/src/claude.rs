@@ -2,7 +2,6 @@
 /// Format: ~/.claude/projects/**/<session-uuid>.jsonl
 /// Each line is a JSON record with "type" field.
 /// Subagent files live in <session-uuid>/subagents/agent-<id>.jsonl.
-
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
@@ -94,7 +93,10 @@ fn probe_session(session_id: &str, path: &Path) -> Result<CanonicalSession> {
             "user" => {
                 message_count += 1;
                 if cwd.is_none() {
-                    cwd = record.get("cwd").and_then(|v| v.as_str()).map(|s| s.to_string());
+                    cwd = record
+                        .get("cwd")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
                 }
                 if started_at.is_none() {
                     if let Some(ts) = record.get("timestamp").and_then(|v| v.as_str()) {
@@ -135,7 +137,13 @@ pub fn parse_session(session: &CanonicalSession) -> Result<ParsedSession> {
     let mut messages = Vec::new();
     let mut seq = 0usize;
 
-    parse_jsonl_file(&session.source_path, session, &mut messages, &mut seq, false)?;
+    parse_jsonl_file(
+        &session.source_path,
+        session,
+        &mut messages,
+        &mut seq,
+        false,
+    )?;
 
     // Also load subagent files
     let subagent_dir = session.source_path.with_extension("").join("subagents");
@@ -169,8 +177,8 @@ fn parse_jsonl_file(
     seq: &mut usize,
     is_sidechain: bool,
 ) -> Result<()> {
-    let content = std::fs::read_to_string(path)
-        .with_context(|| format!("reading {}", path.display()))?;
+    let content =
+        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
 
     // We need to pair tool_use calls with their tool_result responses.
     // Tool uses appear in assistant messages, results in the following user message.
@@ -183,7 +191,12 @@ fn parse_jsonl_file(
         let record: Value = match serde_json::from_str(line) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("warn: {}:{}: parse error: {}", path.display(), line_no + 1, e);
+                eprintln!(
+                    "warn: {}:{}: parse error: {}",
+                    path.display(),
+                    line_no + 1,
+                    e
+                );
                 continue;
             }
         };
@@ -220,11 +233,22 @@ fn parse_jsonl_file(
 
                 // Tool calls from content blocks
                 let mut tool_calls: Vec<CanonicalTool> = Vec::new();
-                if let Some(content_arr) = record.pointer("/message/content").and_then(|v| v.as_array()) {
+                if let Some(content_arr) = record
+                    .pointer("/message/content")
+                    .and_then(|v| v.as_array())
+                {
                     for block in content_arr {
                         if block.get("type").and_then(|v| v.as_str()) == Some("tool_use") {
-                            let tool_id = block.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                            let tool_name = block.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                            let tool_id = block
+                                .get("id")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_string();
+                            let tool_name = block
+                                .get("name")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_string();
                             let args_summary = extract_args_key(block.get("input"));
 
                             let tool = CanonicalTool {
@@ -268,7 +292,10 @@ fn parse_jsonl_file(
 
             "user" => {
                 // Check for tool_result blocks — update pending tool statuses
-                if let Some(content_arr) = record.pointer("/message/content").and_then(|v| v.as_array()) {
+                if let Some(content_arr) = record
+                    .pointer("/message/content")
+                    .and_then(|v| v.as_array())
+                {
                     for block in content_arr {
                         if block.get("type").and_then(|v| v.as_str()) == Some("tool_result") {
                             let tool_use_id = block
@@ -282,7 +309,11 @@ fn parse_jsonl_file(
                                 .unwrap_or(false);
 
                             if let Some(pending) = pending_tools.get(&tool_use_id) {
-                                let status = if is_error { ToolStatus::Error } else { ToolStatus::Success };
+                                let status = if is_error {
+                                    ToolStatus::Error
+                                } else {
+                                    ToolStatus::Success
+                                };
                                 let err_msg = if is_error {
                                     extract_content_text(block.get("content"))
                                         .map(|s| s.chars().take(200).collect())
@@ -353,10 +384,22 @@ fn parse_jsonl_file(
 fn extract_claude_usage(record: &Value, model: Option<&str>) -> Option<CanonicalUsage> {
     let usage = record.pointer("/message/usage")?;
 
-    let input_tokens = usage.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
-    let output_tokens = usage.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
-    let cache_read = usage.get("cache_read_input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
-    let cache_write = usage.get("cache_creation_input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+    let input_tokens = usage
+        .get("input_tokens")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let output_tokens = usage
+        .get("output_tokens")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let cache_read = usage
+        .get("cache_read_input_tokens")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let cache_write = usage
+        .get("cache_creation_input_tokens")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
 
     let cost_estimated = model.and_then(|m| {
         tracekit_core::estimate_cost(m, input_tokens, output_tokens, cache_read, cache_write)
@@ -377,7 +420,14 @@ fn extract_claude_usage(record: &Value, model: Option<&str>) -> Option<Canonical
 fn extract_args_key(input: Option<&Value>) -> Option<String> {
     let v = input?;
     // Try common path/file keys
-    for key in &["file_path", "path", "pattern", "command", "query", "notebook_path"] {
+    for key in &[
+        "file_path",
+        "path",
+        "pattern",
+        "command",
+        "query",
+        "notebook_path",
+    ] {
         if let Some(s) = v.get(key).and_then(|x| x.as_str()) {
             return Some(s.to_string());
         }
@@ -411,4 +461,3 @@ fn extract_content_text(content: Option<&Value>) -> Option<String> {
     }
     None
 }
-

@@ -7,7 +7,9 @@ pub fn render_analysis(result: &AnalysisResult) -> Result<String> {
     let expensive_html = render_expensive_messages(&result.top_expensive_messages);
 
     // Total identified waste
-    let total_waste: f64 = result.findings.iter()
+    let total_waste: f64 = result
+        .findings
+        .iter()
         .filter_map(|f| f.wasted_cost_usd)
         .sum();
     let waste_display = if total_waste > 0.0 {
@@ -15,9 +17,16 @@ pub fn render_analysis(result: &AnalysisResult) -> Result<String> {
     } else {
         "—".to_string()
     };
-    let waste_class = if total_waste >= 5.0 { "danger" } else if total_waste > 0.0 { "warn" } else { "muted" };
+    let waste_class = if total_waste >= 5.0 {
+        "danger"
+    } else if total_waste > 0.0 {
+        "warn"
+    } else {
+        "muted"
+    };
 
-    Ok(format!(r#"<!DOCTYPE html>
+    Ok(format!(
+        r#"<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -385,7 +394,11 @@ pub fn render_analysis(result: &AnalysisResult) -> Result<String> {
         output_tokens = fmt_tokens(s.total_output_tokens),
         duration = fmt_duration(s.duration_secs()),
         findings_count = result.findings.len(),
-        findings_color = if result.findings.is_empty() { "success" } else { "danger" },
+        findings_color = if result.findings.is_empty() {
+            "success"
+        } else {
+            "danger"
+        },
         model = html_escape(s.model.as_deref().unwrap_or("-")),
         cwd = html_escape(s.cwd.as_deref().unwrap_or("-")),
         started_at = fmt_ts(s.started_at),
@@ -397,23 +410,25 @@ pub fn render_analysis(result: &AnalysisResult) -> Result<String> {
 }
 
 pub fn render_aggregate(results: &[AnalysisResult]) -> Result<String> {
-    let total_cost: f64 = results.iter()
+    let total_cost: f64 = results
+        .iter()
         .filter_map(|r| r.session.total_cost_usd)
         .sum();
     let total_msgs: usize = results.iter().map(|r| r.session.message_count).sum();
     let total_findings: usize = results.iter().map(|r| r.findings.len()).sum();
-    let total_waste: f64 = results.iter()
+    let total_waste: f64 = results
+        .iter()
         .flat_map(|r| r.findings.iter())
         .filter_map(|f| f.wasted_cost_usd)
         .sum();
 
-    let sessions_html = results.iter().map(|r| {
-        let s = &r.session;
-        let session_waste: f64 = r.findings.iter()
-            .filter_map(|f| f.wasted_cost_usd)
-            .sum();
-        format!(
-            r#"<tr>
+    let sessions_html = results
+        .iter()
+        .map(|r| {
+            let s = &r.session;
+            let session_waste: f64 = r.findings.iter().filter_map(|f| f.wasted_cost_usd).sum();
+            format!(
+                r#"<tr>
               <td>{}</td>
               <td class="mono">{}</td>
               <td class="success">{}</td>
@@ -422,17 +437,23 @@ pub fn render_aggregate(results: &[AnalysisResult]) -> Result<String> {
               <td>{}</td>
               <td>{}</td>
             </tr>"#,
-            s.source_agent,
-            truncate(&s.session_id, 36),
-            fmt_cost_html(s.total_cost_usd),
-            if session_waste > 0.0 { format!("~${:.2}", session_waste) } else { "—".to_string() },
-            html_escape(s.cwd.as_deref().unwrap_or("-")),
-            fmt_ts(s.started_at),
-            s.message_count,
-        )
-    }).collect::<String>();
+                s.source_agent,
+                truncate(&s.session_id, 36),
+                fmt_cost_html(s.total_cost_usd),
+                if session_waste > 0.0 {
+                    format!("~${:.2}", session_waste)
+                } else {
+                    "—".to_string()
+                },
+                html_escape(s.cwd.as_deref().unwrap_or("-")),
+                fmt_ts(s.started_at),
+                s.message_count,
+            )
+        })
+        .collect::<String>();
 
-    Ok(format!(r#"<!DOCTYPE html>
+    Ok(format!(
+        r#"<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -515,18 +536,29 @@ fn render_findings(findings: &[Finding]) -> String {
         return r#"<div class="no-findings">No inefficiencies detected</div>"#.to_string();
     }
 
-    findings.iter().map(|f| {
-        let evidence_html = f.evidence.iter().take(5)
-            .map(|e| format!(r#"<div class="finding-evidence">{}</div>"#, html_escape(e)))
-            .collect::<String>();
+    findings
+        .iter()
+        .map(|f| {
+            let evidence_html = f
+                .evidence
+                .iter()
+                .take(5)
+                .map(|e| format!(r#"<div class="finding-evidence">{}</div>"#, html_escape(e)))
+                .collect::<String>();
 
-        let waste_html = f.wasted_cost_usd
-            .filter(|&c| c > 0.0)
-            .map(|c| format!(r#"<span class="waste-pill">~{} wasted</span>"#, fmt_cost_html(Some(c))))
-            .unwrap_or_default();
+            let waste_html = f
+                .wasted_cost_usd
+                .filter(|&c| c > 0.0)
+                .map(|c| {
+                    format!(
+                        r#"<span class="waste-pill">~{} wasted</span>"#,
+                        fmt_cost_html(Some(c))
+                    )
+                })
+                .unwrap_or_default();
 
-        format!(
-            r#"<div class="finding">
+            format!(
+                r#"<div class="finding">
               <div class="finding-top">
                 <span class="finding-kind">{kind}</span>
                 <span class="finding-desc">{desc}</span>
@@ -535,13 +567,14 @@ fn render_findings(findings: &[Finding]) -> String {
               <div class="finding-meta">confidence {conf:.0}%</div>
               {evidence}
             </div>"#,
-            kind = f.kind,
-            desc = html_escape(&f.description),
-            waste = waste_html,
-            conf = f.confidence * 100.0,
-            evidence = evidence_html,
-        )
-    }).collect()
+                kind = f.kind,
+                desc = html_escape(&f.description),
+                waste = waste_html,
+                conf = f.confidence * 100.0,
+                evidence = evidence_html,
+            )
+        })
+        .collect()
 }
 
 fn render_expensive_messages(messages: &[ExpensiveMessage]) -> String {
@@ -549,22 +582,25 @@ fn render_expensive_messages(messages: &[ExpensiveMessage]) -> String {
         return r#"<div style="padding:1.25rem;color:var(--text-3);font-size:.85rem">No cost data available.</div>"#.to_string();
     }
 
-    let rows = messages.iter().map(|m| {
-        format!(
-            r#"<tr>
+    let rows = messages
+        .iter()
+        .map(|m| {
+            format!(
+                r#"<tr>
               <td class="mono">{}</td>
               <td class="success">{}</td>
               <td class="mono">{}</td>
               <td class="mono">{}</td>
               <td class="mono">{}</td>
             </tr>"#,
-            m.sequence,
-            fmt_cost_html(Some(m.cost_usd)),
-            fmt_tokens(m.input_tokens),
-            fmt_tokens(m.output_tokens),
-            m.tool_count,
-        )
-    }).collect::<String>();
+                m.sequence,
+                fmt_cost_html(Some(m.cost_usd)),
+                fmt_tokens(m.input_tokens),
+                fmt_tokens(m.output_tokens),
+                m.tool_count,
+            )
+        })
+        .collect::<String>();
 
     format!(
         r#"<table>

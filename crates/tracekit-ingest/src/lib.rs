@@ -21,7 +21,7 @@ pub fn discover_sessions(
             Agent::Claude => claude::discover_sessions()?,
             Agent::Opencode => opencode::discover_sessions()?,
             Agent::Codex => codex::discover_sessions()?,
-            Agent::Pi => Vec::new(), // TODO
+            Agent::Pi => Vec::new(),   // TODO
             Agent::Kodo => Vec::new(), // TODO
         };
         sessions.extend(found);
@@ -39,9 +39,7 @@ pub fn discover_sessions(
     }
 
     // Sort newest first
-    sessions.sort_by(|a, b| {
-        b.started_at.cmp(&a.started_at)
-    });
+    sessions.sort_by(|a, b| b.started_at.cmp(&a.started_at));
 
     if let Some(n) = limit {
         sessions.truncate(n);
@@ -53,7 +51,9 @@ pub fn discover_sessions(
 /// Find a specific session by ID across all agents.
 pub fn find_session(session_id: &str, agents: &[Agent]) -> Result<Option<CanonicalSession>> {
     let sessions = discover_sessions(agents, None, None, None, None)?;
-    Ok(sessions.into_iter().find(|s| s.session_id.starts_with(session_id)))
+    Ok(sessions
+        .into_iter()
+        .find(|s| s.session_id.starts_with(session_id)))
 }
 
 /// Fully parse a session (load all messages, compute totals).
@@ -76,7 +76,12 @@ pub fn default_root(agent: Agent) -> Option<PathBuf> {
     let home = dirs_next();
     match agent {
         Agent::Claude => home.map(|h| h.join(".claude").join("projects")),
-        Agent::Opencode => home.map(|h| h.join(".local").join("share").join("opencode").join("storage")),
+        Agent::Opencode => home.map(|h| {
+            h.join(".local")
+                .join("share")
+                .join("opencode")
+                .join("storage")
+        }),
         Agent::Codex => home.map(|h| h.join(".codex").join("sessions")),
         Agent::Pi => home.map(|h| h.join(".pi").join("agent").join("sessions")),
         Agent::Kodo => home.map(|h| h.join(".kodo").join("sessions")),
